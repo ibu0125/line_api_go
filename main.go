@@ -33,5 +33,18 @@ func main() {
 		}
 	})
 
+
+	http.HandleFunc("/callback",func(w http.ResponseWriter, r *http.Request) {
+		if r.Method!=http.MethodPost{
+			http.Error(w,"許可されないリクエストです",http.StatusMethodNotAllowed)
+			return
+		}
+
+		log.Println("Webhook接続OK")
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
 	log.Fatal(http.ListenAndServe(":"+port,nil))
 }
