@@ -1,17 +1,30 @@
 package main
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
 )
+
+func validateSignature(body []byte, signature string, secret string) bool {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	expected := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(expected), []byte(signature))
+}
+
 
 func main() {
 	port := os.Getenv("PORT")
 	if port=="" {
 		port="8080"
 	}
+
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -35,16 +48,30 @@ func main() {
 
 
 	http.HandleFunc("/callback",func(w http.ResponseWriter, r *http.Request) {
-		if r.Method!=http.MethodPost{
-			http.Error(w,"許可されないリクエストです",http.StatusMethodNotAllowed)
+		if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
 		}
 
-		log.Println("Webhook接続OK")
+		signature := r.Header.Get("X-Line-Signature")
+		secret := os.Getenv("LINE_CHANNEL_SECRET")
+
+		if !validateSignature(body, signature, secret) {
+			http.Error(w, "Invalid signature", http.StatusUnauthorized)
+			return
+		}
+
+		log.Println("LINE Webhook OK")
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
 
-	log.Fatal(http.ListenAndServe(":"+port,nil))
 }
+
