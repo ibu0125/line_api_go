@@ -81,3 +81,21 @@ func AddUser(lineUserID string)error{
 	)
 	return err
 }
+
+
+
+func UseAuthCode(code string) (bool,error) {
+	resp,err:=request(
+		"PACH",
+		"/rest/v1/users?code=eq."+code+"&used=eq.false",
+		map[string]bool{"used":true},
+	)
+
+	if err!=nil {
+		return false,err
+	}
+
+	defer resp.Body.Close()
+
+	return resp.StatusCode==204,nil
+}
