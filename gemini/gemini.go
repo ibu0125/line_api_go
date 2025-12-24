@@ -128,13 +128,8 @@ runs[].text の内容のみを書き換えてください。` // 省略
         return "初期化失敗", err
     }
 
-    userPrompt := `
-【構造テンプレートJSON】
-` + templateJSON + `
+   userPrompt := "【構造テンプレートJSON】\n" + templateJSON + "\n【新しい研究内容】\n" + researchText
 
-【新しい研究内容】
-` + researchText + `
-`
 
     res, err := chat.SendMessage(ctx, genai.Part{Text: userPrompt})
     if err != nil {
