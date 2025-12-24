@@ -115,6 +115,7 @@ func main() {
 						log.Println("code:",exists_code)
 
 						if exists_code {
+							supabase.AddUser(userId)
 							profile, err := bot.GetProfile(userId).Do()
                 			if err != nil || profile == nil {
                     			log.Printf("GetProfile error: %v", err)
@@ -123,6 +124,7 @@ func main() {
 
                 			displayName := profile.DisplayName
 							reply(bot,ev,"認証完了しました。"+displayName+"様、よろしくお願いいたします")
+
 							continue
 						}else{
 							reply(bot,ev,"このAIは購入者限定です。認証コードを送信してください")
