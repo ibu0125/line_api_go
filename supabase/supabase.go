@@ -83,19 +83,19 @@ func AddUser(lineUserID string)error{
 }
 
 
+func UseAuthCode(code string) (bool, error) {
+    resp, err := request(
+        "PATCH", 
+        "/rest/v1/users?code=eq."+code+"&used=eq.false",
+        map[string]bool{"used": true},
+    )
+    if err != nil {
+        return false, err
+    }
+    defer resp.Body.Close()
 
-func UseAuthCode(code string) (bool,error) {
-	resp,err:=request(
-		"PACH",
-		"/rest/v1/users?code=eq."+code+"&used=eq.false",
-		map[string]bool{"used":true},
-	)
-
-	if err!=nil {
-		return false,err
-	}
-
-	defer resp.Body.Close()
-
-	return resp.StatusCode==204,nil
+    if resp.StatusCode == 204 {
+        return true, nil
+    }
+    return false, nil
 }
