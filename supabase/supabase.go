@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -33,6 +34,8 @@ func request(method, p string, body any) (*http.Response, error) {
 		return nil, err
 	}
 	u.Path = path.Join(u.Path, p)
+
+	log.Println("path: ",u.String())
 
 	req, err := http.NewRequest(method, u.String(), &buf) // ← ★ここ
 	if err != nil {
@@ -93,7 +96,7 @@ func UseAuthCode(code string) (bool, error) {
         return false, err
     }
     defer resp.Body.Close()
-
+	log.Println("StatusCode:", resp.StatusCode)
     if resp.StatusCode == 204 {
         return true, nil
     }
