@@ -160,6 +160,7 @@ func main() {
 							text,
 						)
 						if err != nil {
+							log.Println(err)
 							reply(bot, ev, "生成に失敗しました")
 							continue
 						}
