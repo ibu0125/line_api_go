@@ -26,7 +26,7 @@ func UploadDocx(container, blobName, localPath string) error {
 		return err
 	}
 
-	serviceURL:=fmt.Sprintf("http://%s.blob.core.windows.net/",AZURE_STORAGE_ACCOUNT)
+	serviceURL:=fmt.Sprintf("https://%s.blob.core.windows.net/",AZURE_STORAGE_ACCOUNT)
 
 	client,err:=azblob.NewClientWithSharedKeyCredential(serviceURL,cred,nil)
 	if err != nil {
@@ -81,7 +81,7 @@ func GenerateBlobSASURL(containerName,blobName string,expireMinutes int)(string,
 	}
 
 	sasURL:=fmt.Sprintf(
-		"http://%s.blob.core.windows.net/%s/%s?%s",
+		"https://%s.blob.core.windows.net/%s/%s?%s",
 		AZURE_STORAGE_ACCOUNT,
 		containerName,
 		blobName,
