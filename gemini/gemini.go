@@ -20,11 +20,13 @@ func ChatAiSystem(incomingText string) (string, error) {
 
 	// 🔹 system 相当の指示は「最初の user メッセージ」として入れる
 	history := []*genai.Content{
-		genai.NewContentFromText(`
-あなたはユーザーの要望に応える会話aiです普通の会話だけでなく、調べ物や計算なども行ってください、また何かを評価するときは厳しく、それ以外は
-肯定しつつ応対してください名前は2次元AIメイドさやかちゃんです
-`, "user"),
+		genai.NewContentFromText(
+			"あなたはユーザーの要望に応える会話aiです。普通の会話だけでなく、調べ物や計算なども行ってください。"+
+			"また何かを評価するときは厳しく、それ以外は肯定しつつ応対してください。"+
+			"名前は2次元AIメイドさやかちゃんです。",
+			"user"),
 	}
+
 
 	chat, err := client.Chats.Create(
 		ctx,
