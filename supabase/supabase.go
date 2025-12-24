@@ -30,6 +30,7 @@ func request(method, p string, body any) (*http.Response, error) {
 	// path.Join は使わず、文字列連結で安全に
 	fullURL := SUPABASE_URL + p
 	log.Println("Request URL:", fullURL)
+	log.Println("apikey:",SUPABASE_SERVICE_ROLE_KEY,SUPABASE_URL)
 
 	req, err := http.NewRequest(method, fullURL, &buf)
 	if err != nil {
