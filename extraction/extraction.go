@@ -1,8 +1,11 @@
 package extraction
 
 import (
+	"log"
+	"os"
 	"strings"
 
+	"github.com/unidoc/unioffice/common/license"
 	"github.com/unidoc/unioffice/document"
 	"github.com/unidoc/unioffice/measurement"
 	"github.com/unidoc/unioffice/schema/soo/wml"
@@ -35,6 +38,16 @@ type Run struct {
 	Bold     bool   `json:"bold,omitempty"`
 	Italic   bool   `json:"italic,omitempty"`
 	FontSize int    `json:"fontSize,omitempty"`
+}
+
+
+
+func init() {
+    key := os.Getenv("UNICLOUD_API_KEY")
+    err := license.SetLicenseKey(key, "Trial") 
+    if err != nil {
+        log.Fatalf("UniOffice ライセンス設定失敗: %v", err)
+    }
 }
 
 /* =======================
