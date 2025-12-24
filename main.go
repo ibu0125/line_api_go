@@ -1,151 +1,227 @@
 package main
 
 import (
+	"encoding/json"
+	"go_project/extraction"
 	"go_project/gemini"
 	"go_project/supabase"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/line/line-bot-sdk-go/linebot"
 )
 
-var(
-    LINE_CHANNEL_SECRET = os.Getenv("LINE_CHANNEL_SECRET")
-    LINE_CHANNEL_ACCESS_TOKEN = os.Getenv("LINE_CHANNEL_ACCESS_TOKEN")
+var (
+	LINE_CHANNEL_SECRET       = os.Getenv("LINE_CHANNEL_SECRET")
+	LINE_CHANNEL_ACCESS_TOKEN = os.Getenv("LINE_CHANNEL_ACCESS_TOKEN")
+
+	userMode      = map[string]string{} // chat / generate
+	templatePath = map[string]string{} // 保存用（任意）
+	templateJSON = map[string]string{} // ★ Word構造JSON
 )
 
-func reply(bot *linebot.Client, ev *linebot.Event, replyText string) {
+func reply(bot *linebot.Client, ev *linebot.Event, text string) {
 	_, err := bot.ReplyMessage(
 		ev.ReplyToken,
-		linebot.NewTextMessage(replyText),
+		linebot.NewTextMessage(text),
 	).Do()
-
 	if err != nil {
-		log.Printf("ReplyMessage error: %v", err)
+		log.Println("Reply error:", err)
 	}
 }
 
-
 func main() {
-	bot, err := linebot.New(LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN)
 
+	bot, err := linebot.New(
+		LINE_CHANNEL_SECRET,
+		LINE_CHANNEL_ACCESS_TOKEN,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    if err != nil {
-        log.Fatalf("linebot.New error: %v", err)
-    }
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
+	http.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("OK"))
+	})
 
-    port := os.Getenv("PORT")
-    if port == "" {
-        port = "8080"
-    }
+	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 
-    http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-        w.WriteHeader(http.StatusOK)
-        w.Write([]byte("OK"))
-    })
+		events, err := bot.ParseRequest(r)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
-    http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-        events, err := bot.ParseRequest(r)
-        if err != nil {
-            if err == linebot.ErrInvalidSignature {
-                w.WriteHeader(http.StatusBadRequest)
-            } else {
-                w.WriteHeader(http.StatusInternalServerError)
-            }
-            log.Printf("ParseRequest error: %v", err)
-            return
-        }
+		for _, ev := range events {
 
-        for _, ev := range events {
-            switch ev.Type {
-            case linebot.EventTypeFollow:
-                userId := ev.Source.UserID
+			switch ev.Type {
 
-                exists, err := supabase.IsUser(userId)
-                if err != nil {
-                    log.Printf("IsUser error: %v", err)
-					reply(bot,ev,"通信エラーが発生しました。しばらくしてからもう一度お試しください。")
-                    continue
-                }
+			// ================= フォロー =================
+			case linebot.EventTypeFollow:
+				userID := ev.Source.UserID
 
-                if !exists {
-					reply(bot,ev,"このAIは購入者限定です。認証コードを送信してください")
-                    continue
-                }else{
-					profile, err := bot.GetProfile(userId).Do()
-                	if err != nil || profile == nil {
-                    	log.Printf("GetProfile error: %v", err)
-						reply(bot,ev,"フォローありがとうございます！よろしくお願いいたします。")
-               	 	}
-
-                	displayName := profile.DisplayName
-					reply(bot,ev,"認証完了しました。"+displayName+"様、よろしくお願いいたします")
-
+				exists, err := supabase.IsUser(userID)
+				if err != nil {
+					reply(bot, ev, "通信エラーが発生しました")
 					continue
 				}
 
+				if !exists {
+					reply(bot, ev, "このAIは購入者限定です。\n認証コードを送信してください")
+					continue
+				}
 
+				reply(bot, ev, "認証済みです。\n#会話\n#生成\nから選択してください")
 
+			// ================= メッセージ =================
 			case linebot.EventTypeMessage:
-				userId:=ev.Source.UserID
-				switch message:=ev.Message.(type){
+				userID := ev.Source.UserID
+
+				switch msg := ev.Message.(type) {
+
+				// ---------- テキスト ----------
 				case *linebot.TextMessage:
-					incoming_text:=message.Text
-					log.Println("受信したテキスト：",incoming_text,userId)
+					text := strings.TrimSpace(msg.Text)
+					log.Println("TEXT:", userID, text)
 
-					exists,err:=supabase.IsUser(userId)
-
+					exists, err := supabase.IsUser(userID)
 					if err != nil {
-                    	log.Printf("IsUser error: %v", err)
-						reply(bot,ev,"通信エラーが発生しました。しばらくしてからもう一度お試しください。")
-                    	continue
-                	}
-
-					log.Println("user:",exists)
-					if !exists {
-						exists_code,err:=supabase.UseAuthCode(incoming_text)
-						if err != nil {
-                    		log.Printf("IsUser error: %v", err)
-							reply(bot,ev,"通信エラーが発生しました。しばらくしてからもう一度お試しください。")
-                			continue
-            			}
-
-						log.Println("code:",exists_code)
-
-						if exists_code {
-							supabase.AddUser(userId)
-							profile, err := bot.GetProfile(userId).Do()
-                			if err != nil || profile == nil {
-                    			log.Printf("GetProfile error: %v", err)
-								reply(bot,ev,"フォローありがとうございます！よろしくお願いいたします。")
-               	 			}
-
-                			displayName := profile.DisplayName
-							reply(bot,ev,"認証完了しました。"+displayName+"様、よろしくお願いいたします")
-
-							continue
-						}else{
-							reply(bot,ev,"このAIは購入者限定です。認証コードを送信してください")
-                    		continue
-						}
-					}else{
-
-						//文章をAIに渡す
-						reply_text,err:=gemini.AiSystem(incoming_text)
-						if err!=nil {
-							log.Println("err:",err)
-							reply(bot,ev,reply_text)
-							continue
-						}
-						reply(bot,ev,reply_text)
+						reply(bot, ev, "通信エラーが発生しました")
 						continue
 					}
+
+					// 未認証
+					if !exists {
+						ok, err := supabase.UseAuthCode(text)
+						if err != nil {
+							reply(bot, ev, "通信エラーが発生しました")
+							continue
+						}
+
+						if ok {
+							_ = supabase.AddUser(userID)
+							reply(bot, ev, "認証完了しました。\n#会話\n#生成\nを選択してください")
+						} else {
+							reply(bot, ev, "認証コードが正しくありません")
+						}
+						continue
+					}
+
+					// モード切替
+					if text == "#会話" {
+						userMode[userID] = "chat"
+						reply(bot, ev, "会話モードに切り替えました")
+						continue
+					}
+
+					if text == "#生成" {
+						userMode[userID] = "generate"
+						delete(templatePath, userID)
+						delete(templateJSON, userID)
+						reply(bot, ev, "生成モードです。\nWordテンプレート（.docx）を送信してください")
+						continue
+					}
+
+					mode := userMode[userID]
+					if mode == "" {
+						reply(bot, ev, "#会話 または #生成 を選択してください")
+						continue
+					}
+
+					// ---------- 会話モード ----------
+					if mode == "chat" {
+						out, err := gemini.ChatAiSystem(text)
+						if err != nil {
+							reply(bot, ev, "AI応答に失敗しました")
+							continue
+						}
+						reply(bot, ev, out)
+						continue
+					}
+
+					// ---------- 生成モード ----------
+					if mode == "generate" {
+
+						if templateJSON[userID] == "" {
+							reply(bot, ev, "先に Wordテンプレート（.docx）を送信してください")
+							continue
+						}
+
+						out, err := gemini.GenerateAiSystem(
+							templateJSON[userID],
+							text,
+						)
+						if err != nil {
+							reply(bot, ev, "生成に失敗しました")
+							continue
+						}
+
+						reply(bot, ev, out)
+						continue
+					}
+
+				// ---------- Wordファイル ----------
+				case *linebot.FileMessage:
+					log.Println("FILE:", msg.FileName, userID)
+
+					if userMode[userID] != "generate" {
+						reply(bot, ev, "ファイル送信は生成モードで行ってください")
+						continue
+					}
+
+					if !strings.HasSuffix(strings.ToLower(msg.FileName), ".docx") {
+						reply(bot, ev, "対応しているのは Word（.docx）のみです")
+						continue
+					}
+
+					content, err := bot.GetMessageContent(msg.ID).Do()
+					if err != nil {
+						reply(bot, ev, "ファイル取得に失敗しました")
+						continue
+					}
+					defer content.Content.Close()
+
+					path := "/tmp/" + userID + "_template.docx"
+					f, err := os.Create(path)
+					if err != nil {
+						reply(bot, ev, "ファイル保存に失敗しました")
+						continue
+					}
+					defer f.Close()
+
+					if _, err := io.Copy(f, content.Content); err != nil {
+						reply(bot, ev, "ファイル書き込みに失敗しました")
+						continue
+					}
+
+					// ★ Word構造抽出
+					docStruct, err :=extraction.ExtractWordStructure(path)
+					if err != nil {
+						reply(bot, ev, "Word構造の解析に失敗しました")
+						continue
+					}
+
+					jsonBytes, _ := json.MarshalIndent(docStruct, "", "  ")
+					templateJSON[userID] = string(jsonBytes)
+					templatePath[userID] = path
+
+					reply(bot, ev,
+						"✅ Wordテンプレートを解析しました\n"+
+							"次に【研究内容】を送信してください",
+					)
 				}
-            }
-        }
-    })
-    log.Printf("Listening on :%s", port)
-    log.Fatal(http.ListenAndServe(":"+port, nil))
+			}
+		}
+	})
+
+	log.Println("Listening on :" + port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
