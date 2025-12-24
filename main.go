@@ -135,6 +135,7 @@ func main() {
 						//文章をAIに渡す
 						reply_text,err:=gemini.AiSystem(incoming_text)
 						if err!=nil {
+							log.Println(err)
 							reply(bot,ev,reply_text)
 							continue
 						}
