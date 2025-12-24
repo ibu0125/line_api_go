@@ -85,7 +85,7 @@ func AddUser(lineUserID string)error{
 func UseAuthCode(code string) (bool, error) {
     resp, err := request(
         "PATCH", 
-        "/rest/v1/users?code=eq."+code+"&used=eq.false",
+        "/rest/v1/users?code=eq."+code+"&used=is.false",
         map[string]bool{"used": true},
     )
     if err != nil {
