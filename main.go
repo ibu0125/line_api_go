@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	azure "go_project/azurefolder"
 	"go_project/extraction"
 	"go_project/gemini"
 	"go_project/supabase"
@@ -9,9 +10,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/line/line-bot-sdk-go/linebot"
+	"github.com/line/line-bot-sdk-go/v7/linebot"
 )
 
 var (
@@ -27,6 +29,23 @@ func reply(bot *linebot.Client, ev *linebot.Event, text string) {
 	_, err := bot.ReplyMessage(
 		ev.ReplyToken,
 		linebot.NewTextMessage(text),
+	).Do()
+	if err != nil {
+		log.Println("Reply error:", err)
+	}
+}
+
+
+func replyFile(bot *linebot.Client, ev *linebot.Event, text string) {
+
+	action := linebot.NewURIAction("リンクを見る", text)
+	buttonTemplate := linebot.NewButtonsTemplate(
+    	"", "ファイル", "頼まれていたファイルが完成しました",
+    	action,
+	)
+	_, err := bot.ReplyMessage(
+		ev.ReplyToken,
+		linebot.NewTemplateMessage(text,buttonTemplate),
 	).Do()
 	if err != nil {
 		log.Println("Reply error:", err)
@@ -165,7 +184,19 @@ func main() {
 							continue
 						}
 
-						reply(bot, ev, out)
+						container:="documents"
+						blobName:=filepath.Base(out)
+
+						err=azure.UploadDocx(container,blobName,out)
+						if err!=nil {
+							log.Println(err)
+							reply(bot,ev,"faileのアップロードに失敗しました")
+							continue
+						}
+
+						sasUrl,err:=azure.GenerateBlobSASURL(container,blobName,5)
+
+						replyFile(bot, ev, sasUrl)
 						continue
 					}
 
@@ -191,6 +222,7 @@ func main() {
 					defer content.Content.Close()
 
 					path := "/tmp/" + userID + "_template.docx"
+
 					f, err := os.Create(path)
 					if err != nil {
 						reply(bot, ev, "ファイル保存に失敗しました")
