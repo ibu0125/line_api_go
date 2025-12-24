@@ -103,6 +103,7 @@ func main() {
                     	continue
                 	}
 
+					log.Println("user:",exists)
 					if !exists {
 						exists_code,err:=supabase.UseAuthCode(incoming_text)
 						if err != nil {
@@ -110,6 +111,8 @@ func main() {
 							reply(bot,ev,"通信エラーが発生しました。しばらくしてからもう一度お試しください。")
                 			continue
             			}
+
+						log.Println("code:",exists_code)
 
 						if exists_code {
 							profile, err := bot.GetProfile(userId).Do()
