@@ -6,9 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
-	"path"
 )
 
 var (
@@ -29,15 +27,11 @@ func request(method, p string, body any) (*http.Response, error) {
 		}
 	}
 
-	u, err := url.Parse(SUPABASE_URL)
-	if err != nil {
-		return nil, err
-	}
-	u.Path = path.Join(u.Path, p)
+	// path.Join は使わず、文字列連結で安全に
+	fullURL := SUPABASE_URL + p
+	log.Println("Request URL:", fullURL)
 
-	log.Println("path: ",u.String())
-
-	req, err := http.NewRequest(method, u.String(), &buf) // ← ★ここ
+	req, err := http.NewRequest(method, fullURL, &buf)
 	if err != nil {
 		return nil, err
 	}
@@ -49,6 +43,7 @@ func request(method, p string, body any) (*http.Response, error) {
 
 	return http.DefaultClient.Do(req)
 }
+
 
 
 
