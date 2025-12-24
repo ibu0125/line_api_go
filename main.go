@@ -45,7 +45,7 @@ func main() {
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "10000"
 	}
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {

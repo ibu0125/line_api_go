@@ -3,19 +3,57 @@ package gemini
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go_project/extraction"
 	"log"
 	"os"
+	"regexp"
+	"strings"
 
 	"google.golang.org/genai"
 )
+
+var apiKey=os.Getenv("GEMINI_API_KEY")
+
+func cleanJSONFromText(s string) (string, error) {
+    // よくあるパターン：```json ... ``` を取り除く
+    s = strings.TrimSpace(s)
+    if strings.HasPrefix(s, "```") {
+        // 最初のフェンスを除去
+        // 例: ```json\n{...}\n```
+        s = strings.TrimPrefix(s, "```json")
+        s = strings.TrimPrefix(s, "```JSON")
+        s = strings.TrimPrefix(s, "```")
+        // 終端フェンス除去
+        if idx := strings.LastIndex(s, "```"); idx >= 0 {
+            s = s[:idx]
+        }
+        s = strings.TrimSpace(s)
+    }
+
+    // 先頭・末尾のバッククォートや不要文字を削除
+    s = strings.Trim(s, "` \t\r\n")
+
+    // 正規表現で最初の JSON オブジェクト/配列を抽出
+    re := regexp.MustCompile(`(?s)(\{.*\}|\[.*\])`)
+    m := re.FindString(s)
+    if m == "" {
+        return "", errors.New("JSON本体が見つかりません（出力に説明文が混在）")
+    }
+    return m, nil
+}
 
 
 func ChatAiSystem(incomingText string) (string, error) {
 	ctx := context.Background()
 
-	client, err := genai.NewClient(ctx, nil)
+	
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+        APIKey:  apiKey,
+        Backend: genai.BackendGeminiAPI,
+    })
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -57,7 +95,12 @@ func ChatAiSystem(incomingText string) (string, error) {
 
 func GenerateAiSystem(templateJSON string, researchText string) (string, error) {
 	ctx := context.Background()
-	client, err := genai.NewClient(ctx, nil)
+
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+        APIKey:  apiKey,
+        Backend: genai.BackendGeminiAPI,
+    })
+	
 	if err != nil {
 		return "", fmt.Errorf("Gemini初期化失敗: %v", err)
 	}
@@ -80,24 +123,27 @@ func GenerateAiSystem(templateJSON string, researchText string) (string, error) 
 
 	res, err := chat.SendMessage(ctx, genai.Part{Text: userPrompt})
 	if err != nil {
-		return "生成失敗", err
+    	return "生成失敗", err
 	}
 
-	if len(res.Candidates) == 0 || len(res.Candidates[0].Content.Parts) == 0 {
-		return "応答なし", nil
+	// Candidates[0] のテキストをクリーンに
+	aiRaw := res.Candidates[0].Content.Parts[0].Text
+	aiJSON, err := cleanJSONFromText(aiRaw)
+	if err != nil {
+    	log.Printf("AI生出力: %q", aiRaw)
+    	return "", fmt.Errorf("JSON抽出失敗: %w", err)
 	}
-
-	aiJSON := res.Candidates[0].Content.Parts[0].Text
 
 	var newTemplate extraction.DocTemplate
 	if err := json.Unmarshal([]byte(aiJSON), &newTemplate); err != nil {
-		return "JSONパース失敗", err
+    	return "JSONパース失敗", err
 	}
 
-	outputPath := "output.docx"
+	outputPath := os.TempDir() + "/output.docx"
 	if err := extraction.ApplyJSONToWordStruct(&newTemplate, outputPath); err != nil {
-		return "Word書き出し失敗", err
+    	return "Word書き出し失敗", err
 	}
 
 	return outputPath, nil
+
 }
