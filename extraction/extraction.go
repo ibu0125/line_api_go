@@ -26,7 +26,7 @@ type Section struct {
 }
 
 type Block struct {
-	Kind   string  `json:"kind"` // paragraph, blank_line, list
+	Kind   string  `json:"kind"` 
 	Style  string  `json:"style,omitempty"`
 	Indent int     `json:"indent,omitempty"`
 	Runs   []Run   `json:"runs,omitempty"`

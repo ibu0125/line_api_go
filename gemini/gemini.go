@@ -59,6 +59,7 @@ func GenerateAiSystem(templateJSON string, researchText string) (string, error) 
     client, err := genai.NewClient(ctx, nil)
     if err != nil {
         log.Fatal(err)
+		log.Println(err)
     }
 
    systemPrompt := "あなたは「文書構造再現AI」です。\n" +
@@ -107,6 +108,7 @@ func GenerateAiSystem(templateJSON string, researchText string) (string, error) 
         genai.NewContentFromText(systemPrompt, "user"),
     })
     if err != nil {
+		println(err)
         return "初期化失敗", err
     }
 
@@ -115,10 +117,12 @@ func GenerateAiSystem(templateJSON string, researchText string) (string, error) 
 
     res, err := chat.SendMessage(ctx, genai.Part{Text: userPrompt})
     if err != nil {
+		println(err)
         return "生成失敗", err
     }
 
     if len(res.Candidates) == 0 || len(res.Candidates[0].Content.Parts) == 0 {
+		log.Println(err)
         return "応答なし", nil
     }
 
@@ -127,12 +131,14 @@ func GenerateAiSystem(templateJSON string, researchText string) (string, error) 
     var newTemplate extraction.DocTemplate
     err = json.Unmarshal([]byte(aiJSON), &newTemplate)
     if err != nil {
+		println(err)
         return "JSONパース失敗", err
     }
 
     outputPath := "output.docx"
     err = extraction.ApplyJSONToWordStruct(&newTemplate, outputPath)
     if err != nil {
+		println(err)
         return "Word書き出し失敗", err
     }
 
