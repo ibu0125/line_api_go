@@ -44,7 +44,7 @@ type Run struct {
 
 func init() {
     key := os.Getenv("UNICLOUD_API_KEY")
-    err := license.SetLicenseKey(key, "Trial") 
+    err := license.SetMeteredKey(key) 
     if err != nil {
         log.Fatalf("UniOffice ライセンス設定失敗: %v", err)
     }

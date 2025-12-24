@@ -31,8 +31,9 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/nguyenthenguyen/docx v0.0.0-20230621112118-9c8e795a11db // indirect
-	github.com/richardlehane/msoleps v1.0.3 // indirect
+	github.com/richardlehane/msoleps v1.0.4 // indirect
 	github.com/unidoc/unioffice v1.39.0 // indirect
+	github.com/unidoc/unioffice/v2 v2.7.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
