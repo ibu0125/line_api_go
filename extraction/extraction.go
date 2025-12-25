@@ -21,8 +21,9 @@ import (
 ======================= */
 
 type DocTemplate struct {
-    Type     string    `json:"type"`
-    Sections []Section `json:"sections"`
+    Type         string       `json:"type"`
+    Sections     []Section    `json:"sections"`
+    PageSettings *wml.CT_SectPr  `json:"-"` // 用紙サイズ・余白情報を保持
 }
 type Section struct {
     Title *Block  `json:"title,omitempty"`
@@ -61,6 +62,20 @@ func init() {
     }
 }
 
+
+/* =======================
+   ページ設定抽出
+======================= */
+func extractPageSettings(doc *document.Document) *wml.CT_SectPr {
+    sectPr := doc.X().Body.SectPr
+    if sectPr == nil {
+        return nil
+    }
+    // コピーして返す
+    copy := *sectPr
+    return &copy
+}
+
 /* =======================
    Word → JSON 抽出
 ======================= */
@@ -72,23 +87,22 @@ func ExtractWordStructure(path string) (*DocTemplate, error) {
     }
     defer doc.Close()
 
-    // 事前に「ハイパーリンクURL辞書」をXML直読みで構築（段落インデックス→複数リンク）
-    linkMap, err := buildHyperlinkMapFromXML(path)
-    if err != nil {
-        // URLが取れなくても致命ではないため、ログに出して継続
-        log.Printf("警告: ハイパーリンクURL抽出に失敗: %v", err)
-    }
-
     result := &DocTemplate{Type: "word"}
+    result.PageSettings = extractPageSettings(doc) // ページ設定を保持
+
+    // 既存の段落・表・画像処理
     var current *Section
     var currentList *Block
     var currentListID int64 = -1
 
-    // 段落処理（高レベルAPI）
+    linkMap, err := buildHyperlinkMapFromXML(path)
+    if err != nil {
+        log.Printf("警告: ハイパーリンクURL抽出に失敗: %v", err)
+    }
+
     for pi, p := range doc.Paragraphs() {
         text := paragraphPlainText(p)
 
-        // ブランク行
         if strings.TrimSpace(text) == "" {
             currentList = nil
             currentListID = -1
@@ -98,7 +112,6 @@ func ExtractWordStructure(path string) (*DocTemplate, error) {
             continue
         }
 
-        // Heading系ならセクションタイトル
         if strings.HasPrefix(p.Style(), "Heading") {
             currentList = nil
             currentListID = -1
@@ -113,7 +126,6 @@ func ExtractWordStructure(path string) (*DocTemplate, error) {
             current = &result.Sections[len(result.Sections)-1]
         }
 
-        // 箇条書き判定（NumPr）
         pp := p.Properties().X()
         if pp != nil && pp.NumPr != nil {
             numID := int64(0)
@@ -137,13 +149,12 @@ func ExtractWordStructure(path string) (*DocTemplate, error) {
             continue
         }
 
-        // 通常段落
         currentList = nil
         currentListID = -1
         current.Body = append(current.Body, *extractParagraphBlock(p, linkMap[pi]))
     }
 
-    // 表処理（セル内段落は上と同じロジックでRuns抽出）
+    // 表処理
     for _, tbl := range doc.Tables() {
         if current == nil {
             result.Sections = append(result.Sections, Section{})
@@ -153,11 +164,10 @@ func ExtractWordStructure(path string) (*DocTemplate, error) {
         for _, row := range tbl.Rows() {
             var rowBlocks []Block
             for _, cell := range row.Cells() {
-                // 各セル内の段落を順に追加
                 for _, p := range cell.Paragraphs() {
                     rowBlocks = append(rowBlocks, Block{
                         Kind: "paragraph",
-                        Runs: extractRuns(p, nil), // セル内リンクURLの段落インデックス対応は省略（必要ならXML再帰）
+                        Runs: extractRuns(p, nil),
                     })
                 }
             }
@@ -166,7 +176,7 @@ func ExtractWordStructure(path string) (*DocTemplate, error) {
         current.Body = append(current.Body, tableBlock)
     }
 
-    // 画像（ImageRef→データ展開は簡易）
+    // 画像
     imgCounter := 1
     for _, img := range doc.Images {
         if current == nil {
@@ -348,7 +358,17 @@ func buildHyperlinkMapFromXML(docxPath string) (map[int][]xmlHyperlink, error) {
 func ApplyJSONToWordStruct(template *DocTemplate, outputPath string) error {
     doc := document.New()
 
-    // 箇条書きの定義
+    // ページ設定をコピー
+    if template.PageSettings != nil {
+        docSect := doc.X().Body.SectPr
+        if docSect == nil {
+            docSect = wml.NewCT_SectPr()
+            doc.X().Body.SectPr = docSect
+        }
+        *docSect = *template.PageSettings
+    }
+
+    // 箇条書き定義
     numDef := createBulletNumbering(doc)
 
     for _, sec := range template.Sections {
@@ -391,7 +411,6 @@ func ApplyJSONToWordStruct(template *DocTemplate, outputPath string) error {
                 }
             case "image":
                 if b.Image != nil {
-                    // ← ここを修正：common.Image を作ってから AddImage
                     img, err := common.ImageFromBytes(b.Image.Data)
                     if err != nil {
                         return err
@@ -413,7 +432,6 @@ func ApplyJSONToWordStruct(template *DocTemplate, outputPath string) error {
 
     return doc.SaveToFile(outputPath)
 }
-
 // ハイパーリンク生成は Paragraph.AddHyperLink を使う
 func applyRuns(p document.Paragraph, runs []Run) {
     for _, r := range runs {
