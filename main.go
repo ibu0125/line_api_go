@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	azure "go_project/azurefolder"
 	"go_project/extraction"
 	"go_project/gemini"
@@ -35,18 +34,6 @@ func reply(bot *linebot.Client, ev *linebot.Event, text string) {
 		log.Println("Reply error:", err)
 	}
 }
-
-
-func buildContextKey(ev *linebot.Event) string {
-	if ev.Source.GroupID != "" {
-		return "group:" + ev.Source.GroupID + ":user:" + ev.Source.UserID
-	}
-	if ev.Source.RoomID != "" {
-		return "room:" + ev.Source.RoomID + ":user:" + ev.Source.UserID
-	}
-	return "user:" + ev.Source.UserID
-}
-
 
 
 func replyFile(bot *linebot.Client, ev *linebot.Event, text string) {
@@ -170,43 +157,14 @@ func main() {
 
 					// ---------- 会話モード ----------
 					if mode == "chat" {
-
-						user, err := supabase.GetUserByLineID(userID)
-						if err != nil || user == nil {
-							reply(bot, ev, "ユーザー情報の取得に失敗しました")
-							continue
-						}
-
-						contextKey := buildContextKey(ev)
-
-						convID, err := supabase.GetOrCreateConversation(user.ID, contextKey)
-						if err != nil {
-							reply(bot, ev, "会話の初期化に失敗しました")
-							continue
-						}
-
-						// ① 過去履歴のみ取得
-						history, err := supabase.GetMessages(convID, 10)
-						if err != nil {
-							reply(bot, ev, "履歴取得に失敗しました")
-							continue
-						}
-
-						// ② AI呼び出し
-						out, err := gemini.ChatWithHistory(history, text)
+						out, err := gemini.ChatAiSystem(text)
 						if err != nil {
 							reply(bot, ev, "AI応答に失敗しました")
 							continue
 						}
-
-						// ③ 保存
-						_ = supabase.AddMessage(convID, "user", text)
-						_ = supabase.AddMessage(convID, "assistant", out)
-
 						reply(bot, ev, out)
 						continue
 					}
-
 
 					// ---------- 生成モード ----------
 					if mode == "generate" {
@@ -298,6 +256,5 @@ func main() {
 	})
 
 	log.Println("Listening on :" + port)
-	fmt.Println(port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
