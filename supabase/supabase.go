@@ -7,7 +7,18 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 )
+
+type Conversation struct {
+	ID string `json:"id"`
+}
+
+type User struct {
+	ID string `json:"id"`
+}
+
+
 
 var (
 	SUPABASE_URL = os.Getenv("SUPABASE_URL")
@@ -29,8 +40,6 @@ func request(method, p string, body any) (*http.Response, error) {
 
 	// path.Join は使わず、文字列連結で安全に
 	fullURL := SUPABASE_URL + p
-	log.Println("Request URL:", fullURL)
-	log.Println("apikey:",SUPABASE_SERVICE_ROLE_KEY,SUPABASE_URL)
 
 	req, err := http.NewRequest(method, fullURL, &buf)
 	if err != nil {
@@ -45,6 +54,105 @@ func request(method, p string, body any) (*http.Response, error) {
 	return http.DefaultClient.Do(req)
 }
 
+
+func GetUserByLineID(lineUserID string) (*User, error) {
+	resp, err := request(
+		"GET",
+		"/rest/v1/users?line_user_id=eq."+lineUserID+"&select=id",
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, errors.New("failed to fetch user")
+	}
+
+	var users []User
+	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+		return nil, err
+	}
+
+	if len(users) == 0 {
+		return nil, nil
+	}
+
+	return &users[0], nil
+}
+
+
+func AddMessage(conversationID, role, content string) error {
+	_, err := request(
+		"POST",
+		"/rest/v1/messages",
+		map[string]string{
+			"conversation_id": conversationID,
+			"role":            role,
+			"content":         content,
+		},
+	)
+	return err
+}
+
+
+func GetMessages(conversationID string, limit int) ([]map[string]string, error) {
+	resp, err := request(
+		"GET",
+		"/rest/v1/messages?conversation_id=eq."+conversationID+
+			"&order=created_at.asc&limit="+strconv.Itoa(limit),
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var msgs []map[string]string
+	json.NewDecoder(resp.Body).Decode(&msgs)
+	return msgs, nil
+}
+
+
+
+func GetOrCreateConversation(userID, contextKey string) (string, error) {
+	// ① 取得
+	resp, err := request(
+		"GET",
+		"/rest/v1/conversations?user_id=eq."+userID+"&context_key=eq."+contextKey,
+		nil,
+	)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var convs []Conversation
+	json.NewDecoder(resp.Body).Decode(&convs)
+
+	if len(convs) > 0 {
+		return convs[0].ID, nil
+	}
+
+	// ② 作成
+	var created []Conversation
+	resp, err = request(
+		"POST",
+		"/rest/v1/conversations?select=id",
+		map[string]string{
+			"user_id":     userID,
+			"context_key": contextKey,
+		},
+	)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	json.NewDecoder(resp.Body).Decode(&created)
+	return created[0].ID, nil
+}
 
 
 

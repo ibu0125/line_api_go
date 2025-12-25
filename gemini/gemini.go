@@ -147,3 +147,68 @@ func GenerateAiSystem(templateJSON string, researchText string) (string, error) 
 	return outputPath, nil
 
 }
+
+
+func ChatWithHistory(
+	history []map[string]string,
+	userText string,
+) (string, error) {
+
+	ctx := context.Background()
+
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	contents := []*genai.Content{
+		genai.NewContentFromText(
+			"あなたは会話を記憶するAIメイド『さやかちゃん』です。",
+			genai.RoleUser,
+		),
+	}
+
+	for _, m := range history {
+
+		var role genai.Role
+		switch m["role"] {
+		case "user":
+			role = genai.RoleUser
+		case "assistant":
+			role = genai.RoleModel
+		default:
+			continue
+		}
+
+		contents = append(contents,
+			genai.NewContentFromText(
+				m["content"],
+				role,
+			),
+		)
+	}
+
+	chat, err := client.Chats.Create(
+		ctx,
+		"gemini-2.5-flash",
+		nil,
+		contents,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	res, err := chat.SendMessage(
+		ctx,
+		genai.Part{Text: userText},
+	)
+	if err != nil {
+		return "", err
+	}
+
+	return res.Candidates[0].Content.Parts[0].Text, nil
+}
+
